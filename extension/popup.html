@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Synapse</title>
+    <style>
+        body {
+            width: 280px;
+            padding: 24px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .logo-container {
+            position: relative;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .logo-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 64px;
+            height: 36px;
+            background: rgba(150, 220, 255, 0.25);
+            filter: blur(16px);
+            border-radius: 50%;
+            z-index: 0;
+        }
+        .logo {
+            width: 48px;
+            height: 48px;
+            opacity: 0.95;
+            mix-blend-mode: screen;
+            position: relative;
+            z-index: 1;
+        }
+        h1 {
+            font-size: 18px;
+            margin: 0;
+            font-weight: 500;
+            letter-spacing: -0.5px;
+        }
+        p {
+            font-size: 12px;
+            color: rgba(255,255,255,0.4);
+            margin: 4px 0 24px 0;
+        }
+        .status-badge {
+            font-size: 10px;
+            font-weight: 600;
+            color: #00ff80;
+            background: rgba(0,255,128,0.05);
+            padding: 4px 12px;
+            border-radius: 100px;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn-list {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .btn {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #fff;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .btn-privacy {
+            margin-top: 16px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.3);
+            text-decoration: none;
+        }
+        .btn-privacy:hover { color: #fff; }
+        
+        svg { opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <div class="logo-glow"></div>
+            <img src="syn_v5_128.png" class="logo" alt="Synapse">
+        </div>
+        <h1>Synapse</h1>
+        <p>Your AI Memory Layer</p>
+        
+        <div class="status-badge">Neural Link Active</div>
+        
+        <div class="btn-list">
+            <button id="login-google" class="btn">
+                <svg width="16" height="16" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#fff"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#fff"/><path d="M3.964 10.712c-.18-.54-.282-1.117-.282-1.712s.102-1.172.282-1.712V4.956H.957a8.996 8.996 0 0 0 0 8.088l3.007-2.332z" fill="#fff"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.956l3.007 2.332c.708-2.127 2.692-3.711 5.036-3.711z" fill="#fff"/></svg>
+                Continue with Google
+            </button>
+            <button id="login-github" class="btn">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                Continue with GitHub
+            </button>
+            <button id="logout" class="btn" style="margin-top: 12px; color: #ff4d4d; border-color: rgba(255, 77, 77, 0.2); display: none;">Sign Out</button>
+            <a href="https://docs.google.com/document/d/1SSBtB3S3g-R-K5wTp5EB8GObRBl5r71vxF84P3GPNOg/edit?usp=sharing" target="_blank" class="btn-privacy">Privacy Policy</a>
+            <a href="https://www.linkedin.com/in/geervan/" target="_blank" class="btn-privacy">Contact Geervan</a>
+            
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

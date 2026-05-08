@@ -1,0 +1,170 @@
+{
+  "name": "synapse-bridge",
+  "displayName": "Synapse Memory Bridge",
+  "description": "Cloud-synced AI memory for VS Code with local Ollama refinement.",
+  "version": "0.2.0",
+  "publisher": "geervan",
+  "icon": "media/marketplace_icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geervan/synapse"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Programming Languages"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "synapse-explorer",
+          "title": "Synapse",
+          "icon": "media/clean_icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "synapse-explorer": [
+        {
+          "id": "synapse-sessions",
+          "name": "Cloud Memories"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "synapse.fetchContext",
+        "title": "Synapse: Copy Prompt Context",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "synapse.generateMemoryFile",
+        "title": "Synapse: Generate AI Memory File (.md)",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "synapse.generateRawMemoryFile",
+        "title": "Synapse: Generate Raw Memory File (.md)",
+        "icon": "$(output)"
+      },
+      {
+        "command": "synapse.login",
+        "title": "Synapse: Login to Cloud",
+        "icon": "$(account)"
+      },
+      {
+        "command": "synapse.logout",
+        "title": "Synapse: Logout from Cloud",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "synapse.syncKey",
+        "title": "Synapse: Sync Encryption Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "synapse.deleteSession",
+        "title": "Synapse: Delete Memory",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "synapse.selectModel",
+        "title": "Synapse: Select AI Model",
+        "icon": "$(hubot)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "synapse.login",
+          "when": "view == synapse-sessions && !synapse:isLoggedIn",
+          "group": "navigation@0"
+        },
+        {
+          "command": "synapse.logout",
+          "when": "view == synapse-sessions && synapse:isLoggedIn",
+          "group": "navigation@0"
+        },
+        {
+          "command": "synapse.syncKey",
+          "when": "view == synapse-sessions && synapse:isLoggedIn",
+          "group": "navigation@1"
+        },
+        {
+          "command": "synapse.selectModel",
+          "when": "view == synapse-sessions && synapse:isLoggedIn",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "synapse.generateMemoryFile",
+          "when": "view == synapse-sessions && viewItem == session",
+          "group": "inline@1"
+        },
+        {
+          "command": "synapse.generateRawMemoryFile",
+          "when": "view == synapse-sessions && viewItem == session",
+          "group": "inline@2"
+        },
+        {
+          "command": "synapse.fetchContext",
+          "when": "view == synapse-sessions && viewItem == session",
+          "group": "inline@3"
+        },
+        {
+          "command": "synapse.deleteSession",
+          "when": "view == synapse-sessions && viewItem == session",
+          "group": "inline@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Synapse",
+      "properties": {
+        "synapse.supabaseUrl": {
+          "type": "string",
+          "default": "YOUR_SUPABASE_URL",
+          "description": "Your Supabase Project URL"
+        },
+        "synapse.supabaseKey": {
+          "type": "string",
+          "default": "YOUR_SUPABASE_ANON_KEY",
+          "description": "Your Supabase Anon/Public Key"
+        },
+        "synapse.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Local Ollama API URL"
+        },
+        "synapse.ollamaModel": {
+          "type": "string",
+          "default": "qwen2:0.5b",
+          "description": "Ollama model to use for smart context refinement."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.4",
+    "axios": "^1.6.2",
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "18.x",
+    "@types/crypto-js": "^4.2.1",
+    "typescript": "^5.2.2"
+  }
+}

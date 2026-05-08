@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.npm/
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Build artifacts
+*.bundle.js
+dist/
+build/
+
+# Local configuration
+.env
+.env.local
+secrets.json
+*.db
+memory.db
+
+# System files
+.DS_Store
+Thumbs.db
+*.zip
+*.rar
+*.7z
+
+# VS Code specific
+.vscode/
+*.vsix
+out/
+node_modules/
