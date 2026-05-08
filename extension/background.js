@@ -45,6 +45,44 @@ if (supabase) {
         .subscribe();
 }
 
+// ==========================================
+// 1.1 AUTO-UPDATE CHECK (GitHub)
+// ==========================================
+async function checkForUpdates() {
+    try {
+        const response = await fetch('https://raw.githubusercontent.com/Geervan/Synapse/main/extension/manifest.json');
+        if (!response.ok) return;
+        const remoteManifest = await response.json();
+        const currentVersion = chrome.runtime.getManifest().version;
+        
+        if (remoteManifest.version !== currentVersion) {
+            console.log(`SYNAPSE: New version available! Local: ${currentVersion}, Remote: ${remoteManifest.version}`);
+            chrome.storage.local.set({ 
+                update_available: true, 
+                remote_version: remoteManifest.version,
+                update_url: 'https://github.com/Geervan/Synapse' 
+            });
+            // Optional: Set a badge
+            chrome.action.setBadgeText({ text: 'NEW' });
+            chrome.action.setBadgeBackgroundColor({ color: '#00ff80' });
+        } else {
+            chrome.storage.local.set({ update_available: false });
+            chrome.action.setBadgeText({ text: '' });
+        }
+    } catch (err) {
+        console.warn('SYNAPSE: Update check failed:', err);
+    }
+}
+
+// Check on startup and every 6 hours
+chrome.runtime.onStartup.addListener(checkForUpdates);
+chrome.runtime.onInstalled.addListener(checkForUpdates);
+// Use an alarm for periodic checks (MV3 best practice)
+chrome.alarms.create('checkUpdate', { periodInMinutes: 360 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'checkUpdate') checkForUpdates();
+});
+
 // Sync progress tracking (for polling from content script)
 let syncStatus = { done: true, count: 0, progress: null };
 

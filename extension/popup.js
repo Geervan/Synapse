@@ -19,6 +19,19 @@ chrome.runtime.sendMessage({ action: 'get_auth' }, (response) => {
     }
 });
 
+// Check for updates
+chrome.storage.local.get(['update_available', 'update_url'], (res) => {
+    if (res.update_available) {
+        const banner = document.getElementById('update-banner');
+        if (banner) {
+            banner.style.display = 'block';
+            banner.addEventListener('click', () => {
+                chrome.tabs.create({ url: res.update_url || 'https://github.com/Geervan/Synapse' });
+            });
+        }
+    }
+});
+
 function startLogin(provider) {
     const badge = document.querySelector('.status-badge');
     if (badge) badge.innerText = `Linking ${provider}...`;
