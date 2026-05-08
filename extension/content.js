@@ -61,7 +61,6 @@ function showSynapseConfirm(message) {
         confirmBox.style.pointerEvents = 'auto';
         
         confirmBox.innerHTML = `
-            <span class="synapse-toast-icon">⚠️</span>
             <span class="synapse-toast-msg" style="margin-right: 15px;">${message}</span>
             <button id="synapse-confirm-yes" style="background: #ef4444; color: white; border: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-right: 5px;">Yes</button>
             <button id="synapse-confirm-no" style="background: rgba(255,255,255,0.1); color: white; border: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;">No</button>
@@ -264,25 +263,88 @@ function injectUI() {
             if (data && data.user) {
                 const userEmail = data.user.email || "Logged in";
                 authStatus.innerHTML = `
-                    <button id="synapse-copy-key-btn" title="Copy Encryption Key for VS Code" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: #a1a1aa; display: flex; align-items: center; transition: color 0.2s;" onmouseover="this.style.color='#10b981'" onmouseout="this.style.color='#a1a1aa'">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3y"></path></svg>
-                    </button>
-                    <span style="color: #10b981; font-size: 10px; display: inline-flex; align-items: center; margin-right: 4px;" title="${userEmail}">●</span>
-                    <button id="synapse-logout-btn" title="Logout (${userEmail})" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: #a1a1aa; display: flex; align-items: center; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a1a1aa'">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <button id="synapse-key-mgmt-btn" title="Manage Encryption & Sync" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: #a1a1aa; display: flex; align-items: center; transition: color 0.2s;" onmouseover="this.style.color='#10b981'" onmouseout="this.style.color='#a1a1aa'">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3y"></path></svg>
+                        </button>
+                        <span style="color: #10b981; font-size: 10px; display: inline-flex; align-items: center; margin-right: 4px;" title="${userEmail}">●</span>
+                        <button id="synapse-logout-btn" title="Logout (${userEmail})" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: #a1a1aa; display: flex; align-items: center; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a1a1aa'">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                        </button>
+                    </div>
+                    <div id="synapse-key-portal" class="hidden" hidden aria-hidden="true" style="display: none; position: absolute; top: 56px; left: 18px; right: 18px; background: #0d0d12; backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 16px; box-shadow: 0 20px 45px rgba(0,0,0,0.62); z-index: 100;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px;">
+                            <div style="font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1.2px;">Key Management</div>
+                            <button id="synapse-close-portal-btn" title="Close" style="width: 28px; height: 28px; min-width: 28px; padding: 0; border-radius: 7px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.06); color: #a1a1aa; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1;">&times;</button>
+                        </div>
+                        
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.62); margin-bottom: 16px; line-height: 1.5;">
+                            Paste your key from another device below to instantly decrypt your memories.
+                        </div>
+
+                        <button id="synapse-copy-key-btn" class="synapse-btn" style="width: 100%; padding: 11px 14px; font-size: 12px; background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.28); margin-bottom: 16px; display: flex; gap: 10px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            Copy Current Key
+                        </button>
+
+                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 9px;">Sync from Another Device</div>
+                        <input type="text" id="synapse-import-key-input" placeholder="Paste external key..." class="synapse-input" style="font-size: 12px; margin-bottom: 14px; background: rgba(0,0,0,0.24);">
+                        
+                        <div style="display: flex;">
+                            <button id="synapse-save-key-btn" class="synapse-btn" style="width: 100%; padding: 10px 14px; font-size: 12px; background: #ffffff; color: #000;">Update & Unlock</button>
+                        </div>
+                    </div>
                 `;
                 
+                const mgmtBtn = document.getElementById('synapse-key-mgmt-btn');
+                const portal = document.getElementById('synapse-key-portal');
+                const importInput = document.getElementById('synapse-import-key-input');
+                let keyPortalOpen = false;
+
+                const setKeyPortalOpen = (open) => {
+                    keyPortalOpen = open;
+                    portal.classList.toggle('hidden', !open);
+                    portal.hidden = !open;
+                    portal.setAttribute('aria-hidden', String(!open));
+                    panel.style.zIndex = open ? '4' : '1';
+                    fab.style.setProperty('display', open ? 'none' : 'flex', 'important');
+                    fab.style.setProperty('opacity', open ? '0' : '1', 'important');
+                    fab.style.setProperty('pointer-events', open ? 'none' : 'auto', 'important');
+                    portal.style.setProperty('display', open ? 'flex' : 'none', 'important');
+                    if (open) {
+                        portal.style.setProperty('flex-direction', 'column', 'important');
+                    }
+                };
+
+                setKeyPortalOpen(false);
+
+                mgmtBtn.addEventListener('click', () => {
+                    setKeyPortalOpen(!keyPortalOpen);
+                });
+
                 document.getElementById('synapse-copy-key-btn').addEventListener('click', () => {
                     chrome.storage.local.get(['synapse_encryption_key'], (result) => {
                         if (result.synapse_encryption_key) {
                             navigator.clipboard.writeText(result.synapse_encryption_key).then(() => {
-                                showSynapseToast("Encryption Key copied! Paste it in VS Code.", "success");
+                                showSynapseToast("Key copied to clipboard!", "success");
                             });
                         } else {
-                            showSynapseToast("Key not found. Sync something first!", "error");
+                            showSynapseToast("Key not found!", "error");
                         }
                     });
+                });
+
+                document.getElementById('synapse-close-portal-btn').addEventListener('click', () => setKeyPortalOpen(false));
+
+                document.getElementById('synapse-save-key-btn').addEventListener('click', async () => {
+                    const newKey = importInput.value.trim();
+                    if (!newKey) return;
+                    
+                    await chrome.storage.local.set({ synapse_encryption_key: newKey });
+                    showSynapseToast("link updated!", "success");
+                    setKeyPortalOpen(false);
+                    importInput.value = '';
+                    fetchSessions(); 
                 });
                 document.getElementById('synapse-logout-btn').addEventListener('click', async () => {
                     authStatus.innerHTML = '<span class="synapse-spinner" style="width: 10px; height: 10px;"></span>';
@@ -609,7 +671,7 @@ function injectUI() {
                 showSynapseToast("No relevant context found.", "error");
             }
         } catch (e) {
-            showSynapseToast("Retrieval failed.", "error");
+            showSynapseToast("Decryption failed. Check your Key in the Portal", "error");
         }
         injectBtn.innerText = originalText;
     }
@@ -784,12 +846,18 @@ function startVisibilityObserver() {
     }
 }
 
-// Listen for the specific "Delete" push from background.js
+// Listen for the Sync Pulse from background.js
 chrome.runtime.onMessage.addListener((request) => {
-    if (request.action === 'refresh_ui') {
-        console.log("SYNAPSE: Deletion detected! Updating list...");
+    if (request.action === 'refresh_sessions' || request.action === 'refresh_ui') {
+        console.log("SYNAPSE: Sync Pulse received! Instant sync triggered.");
         fetchSessions();
     }
+});
+
+// Pulse Check: Refresh whenever the user switches back to this tab
+window.addEventListener('focus', () => {
+    console.log("SYNAPSE: Tab focused. Performing Pulse Check...");
+    fetchSessions();
 });
 
 // Initialize observer

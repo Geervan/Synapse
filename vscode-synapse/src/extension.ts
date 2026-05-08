@@ -133,10 +133,21 @@ function compressContext(text: string): string {
         text = text.replace(new RegExp(`\\b${word}\\b`, 'gi'), '');
     }
 
-    // Collapse spaces and dedup lines
+    // Collapse spaces and dedup lines safely
     text = text.replace(/ {2,}/g, ' ').replace(/\n{3,}/g, '\n\n');
     
     let result = text.trim();
+    
+    // Clean up dangling punctuation (e.g. ", I can explain" after "Actually" is stripped)
+    result = result.replace(/^[\s,.;:!?-]+/gm, '').trim();
+
+    // Strip Emojis and special AI symbols for a cleaner technical look
+    result = result.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F191}-\u{1F251}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F004}\u{1F0CF}\u{1F170}-\u{1F171}\u{1F17E}-\u{1F17F}\u{1F18E}\u{3030}\u{2B50}\u{2B55}\u{2934}-\u{2935}\u{2B05}-\u{2B07}\u{2194}-\u{2199}\u{21A9}-\u{21AA}\u{3297}\u{3299}\u{303D}\u{231A}\u{231B}\u{23E9}-\u{23EC}\u{23F0}\u{23F3}]/gu, '');
+    result = result.replace(/[🔹👉🔁🧠🔥✅🎯⚡🧵]/g, ''); // Explicitly catch common ones
+    
+    // Final cleanup of redundant spaces
+    result = result.replace(/ +/g, ' ').trim();
+
     // Restore code blocks
     for (let i = 0; i < codeBlocks.length; i++) {
         result = result.replace(`__CODE_BLOCK_${i}__`, codeBlocks[i]);
@@ -151,7 +162,54 @@ export function activate(context: vscode.ExtensionContext) {
     const sessionProvider = new SynapseSessionProvider(context);
     vscode.window.registerTreeDataProvider('synapse-sessions', sessionProvider);
 
-    // Focus Sync: Auto-refresh the sidebar whenever the user switches back to VS Code
+    // Singleton Supabase Client with Auto-Refresh
+    let supabaseInstance: any = null;
+    const getSupabase = async () => {
+        if (supabaseInstance) return supabaseInstance;
+
+        const supabaseUrl = vscode.workspace.getConfiguration('synapse').get<string>('supabaseUrl');
+        const supabaseKey = vscode.workspace.getConfiguration('synapse').get<string>('supabaseKey');
+
+        if (!supabaseUrl || !supabaseKey) return null;
+
+        supabaseInstance = createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: false,
+                storage: {
+                    getItem: async (key: string) => (await context.secrets.get(`supabase_${key}`)) || null,
+                    setItem: async (key: string, value: string) => await context.secrets.store(`supabase_${key}`, value),
+                    removeItem: async (key: string) => await context.secrets.delete(`supabase_${key}`)
+                }
+            }
+        });
+
+        // Listen for session refreshes and update VS Code context
+        supabaseInstance.auth.onAuthStateChange(async (event: string, session: any) => {
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', true);
+            } else if (event === 'SIGNED_OUT') {
+                vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', false);
+            }
+        });
+
+        // Start the Sync Pulse (Realtime Sync) for VS Code
+        supabaseInstance
+            .channel('sync-pulse')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'chunks' }, (payload: any) => {
+                console.log('SYNAPSE: Sync Pulse detected change:', payload.eventType);
+                sessionProvider.refresh();
+            })
+            .subscribe();
+
+        return supabaseInstance;
+    };
+
+    // Attach getSupabase to the provider for shared usage
+    (sessionProvider as any).getSupabase = getSupabase;
+
+    // Focus Sync: Refresh the sidebar whenever the user switches back to VS Code
     context.subscriptions.push(vscode.window.onDidChangeWindowState(e => {
         if (e.focused) {
             sessionProvider.refresh();
@@ -260,9 +318,16 @@ export function activate(context: vscode.ExtensionContext) {
                 `);
 
                 if (reqUrl.pathname === '/token') {
-                    const accessToken = reqUrl.query.access_token;
-                    if (accessToken) {
-                        await context.secrets.store('synapse_access_token', accessToken as string);
+                    const accessToken = reqUrl.query.access_token as string;
+                    const refreshToken = reqUrl.query.refresh_token as string;
+                    if (accessToken && refreshToken) {
+                        const supabase = await getSupabase();
+                        if (supabase) {
+                            await supabase.auth.setSession({
+                                access_token: accessToken,
+                                refresh_token: refreshToken
+                            });
+                        }
                         vscode.window.showInformationMessage(`Synapse: ${method} Successful!`);
                         vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', true);
                         sessionProvider.refresh();
@@ -287,28 +352,41 @@ export function activate(context: vscode.ExtensionContext) {
             const projectId = projectUrl.split('.')[0].split('//')[1];
             
             // Generate a one-line script they can paste in the browser console
-            const script = `copy(JSON.parse(localStorage.getItem('sb-${projectId}-auth-token')).access_token)`;
+            const script = `copy(localStorage.getItem('sb-${projectId}-auth-token'))`;
 
             const action = await vscode.window.showInformationMessage(
-                'To get your token: Open your Supabase/ChatGPT tab, press F12, paste the Retrieval Script into the Console, and then paste the result here.',
+                'To get your session: Open your browser where you are logged in, press F12, paste the Retrieval Script into the Console, and then paste the result here.',
                 'Copy Retrieval Script'
             );
 
             if (action === 'Copy Retrieval Script') {
                 await vscode.env.clipboard.writeText(script);
-                vscode.window.showInformationMessage('Script copied! Paste it into your browser console.');
+                vscode.window.showInformationMessage('Script copied! Paste it into your browser console, it will copy the full session JSON.');
             }
 
-            const token = await vscode.window.showInputBox({ 
-                prompt: 'Paste the Access Token from your browser console',
-                placeHolder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+            const tokenJson = await vscode.window.showInputBox({ 
+                prompt: 'Paste the Full Session JSON from your browser console',
+                placeHolder: '{"access_token":"...","refresh_token":"..."}'
             });
-            if (!token) return;
+            if (!tokenJson) return;
 
-            await context.secrets.store('synapse_access_token', token);
-            vscode.window.showInformationMessage('Synapse: Authenticated via Token!');
-            vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', true);
-            sessionProvider.refresh();
+            try {
+                const sessionObj = JSON.parse(tokenJson);
+                const supabase = await getSupabase();
+                if (supabase && sessionObj.access_token && sessionObj.refresh_token) {
+                    await supabase.auth.setSession({
+                        access_token: sessionObj.access_token,
+                        refresh_token: sessionObj.refresh_token
+                    });
+                    vscode.window.showInformationMessage('Synapse: Authenticated via Session JSON!');
+                    vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', true);
+                    sessionProvider.refresh();
+                } else {
+                    throw new Error("Invalid session format");
+                }
+            } catch (e: any) {
+                vscode.window.showErrorMessage(`Synapse: Invalid session JSON format.`);
+            }
             return;
         }
 
@@ -323,13 +401,14 @@ export function activate(context: vscode.ExtensionContext) {
             cancellable: false
         }, async (progress) => {
             try {
-                const supabase = createClient(supabaseUrl, supabaseKey);
+                const supabase = await getSupabase();
+                if (!supabase) throw new Error("Supabase configuration missing.");
+                
                 const { data, error } = await supabase.auth.signInWithPassword({ email, password });
                 
                 if (error) throw error;
                 if (data.session) {
-                    // Store the session token securely
-                    await context.secrets.store('synapse_access_token', data.session.access_token);
+                    // Supabase automatically stores the full session via our custom storage adapter
                     vscode.window.showInformationMessage(`Synapse: Logged in as ${data.user?.email}`);
                     vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', true);
                     sessionProvider.refresh();
@@ -342,7 +421,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Command: Logout
     context.subscriptions.push(vscode.commands.registerCommand('synapse.logout', async () => {
-        await context.secrets.delete('synapse_access_token');
+        const supabase = await getSupabase();
+        if (supabase) await supabase.auth.signOut();
+        
         vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', false);
         vscode.window.showInformationMessage('Synapse: Logged out successfully.');
         sessionProvider.refresh();
@@ -350,8 +431,13 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Helper to update login state
     async function updateLoginContext() {
-        const token = await context.secrets.get('synapse_access_token');
-        vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', !!token);
+        const supabase = await getSupabase();
+        if (supabase) {
+            const { data } = await supabase.auth.getSession();
+            vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', !!data.session);
+        } else {
+            vscode.commands.executeCommand('setContext', 'synapse:isLoggedIn', false);
+        }
     }
     updateLoginContext();
 
@@ -437,7 +523,8 @@ export function activate(context: vscode.ExtensionContext) {
                 const abortController = new AbortController();
                 token.onCancellationRequested(() => abortController.abort());
 
-                const supabase = createClient(supabaseUrl, supabaseKey);
+                const supabase = await getSupabase();
+                if (!supabase) throw new Error("Supabase is not initialized.");
                 
                 // 1. Fetch Hybrid Context (First 25 for Vision, Last 50 for Progress)
                 const { data: firstChunks, error: e1 } = await supabase
@@ -458,11 +545,10 @@ export function activate(context: vscode.ExtensionContext) {
 
                 if (e1 || e2) throw (e1 || e2);
                 if (!chunks || chunks.length === 0) {
-                    vscode.window.showWarningMessage('No memory found for this session.');
+                    vscode.window.showWarningMessage('No memory found for this session. Use "Upload to Memory" in the browser first.');
                     return;
                 }
 
-                // 2. Decrypt locally
                 const decryptedChunks = await Promise.all(
                     chunks.map(c => SynapseCrypto.decrypt(c.content, aesKey))
                 );
@@ -479,29 +565,36 @@ export function activate(context: vscode.ExtensionContext) {
                     vscode.ViewColumn.One,
                     { enableScripts: true }
                 );
-                panel.webview.html = getWebviewContent("");
+                panel.webview.html = getWebviewContent("", model);
 
                 try {
                     const response = await axios.post(`${ollamaUrl}/api/generate`, {
                         model: model,
+                        system: `You are a headless data extraction pipeline. You do NOT have a personality. You do NOT converse. You MUST NOT output phrases like "I'm sorry", "Here is", "It seems like", or "The key steps are". Your ONLY function is to output raw facts, code, and structured technical data.`,
                         options: { 
-                            temperature: 0.1,
-                            num_thread: 4,
-                            repeat_penalty: 1.2
+                            temperature: 0.0,
+                            repeat_penalty: 1.2,
+                            top_p: 0.1
                         }, 
-                        prompt: `Extract the core technical vision, tech stack, constraints, data relationship and user linking strategy, and requirements from the context below.
-                    
-                    [BEGIN CONTEXT]
-                    ${rawContext}
-                    [END CONTEXT]
+                        prompt: `PROCESS THE FOLLOWING RAW DATA. STRIP ALL CONVERSATIONAL FILLER. OUTPUT ONLY BULLET POINTS AND CODE.
 
-                    TASK: Provide a clean, raw summary of the project goals and technical details discussed. Do not invent features. Just state the facts from the context.`,
+RAW CONTEXT:
+${rawContext}
+
+REFINED TECHNICAL CONTEXT:`,
                         stream: true
                     }, { responseType: 'stream', signal: abortController.signal });
 
                     let fullText = "";
+                    let buffer = ""; // Buffer to handle partial JSON lines
+
                     response.data.on('data', (chunk: Buffer) => {
-                        const lines = chunk.toString().split('\n');
+                        buffer += chunk.toString();
+                        const lines = buffer.split('\n');
+                        
+                        // Keep the last partial line in the buffer
+                        buffer = lines.pop() || "";
+
                         for (const line of lines) {
                             if (!line.trim()) continue;
                             try {
@@ -510,7 +603,12 @@ export function activate(context: vscode.ExtensionContext) {
                                     fullText += json.response;
                                     panel.webview.postMessage({ command: 'update', text: fullText });
                                 }
-                            } catch (e) {}
+                                if (json.done) {
+                                    panel.webview.postMessage({ command: 'update', text: fullText, done: true });
+                                }
+                            } catch (e) {
+                                // Real error or just noise
+                            }
                         }
                     });
                 } catch (err: any) {
@@ -545,7 +643,8 @@ export function activate(context: vscode.ExtensionContext) {
                 const abortController = new AbortController();
                 token.onCancellationRequested(() => abortController.abort());
 
-                const supabase = createClient(supabaseUrl, supabaseKey);
+                const supabase = await getSupabase();
+                if (!supabase) throw new Error("Supabase is not initialized.");
                 
                 // 1. Fetch Hybrid Context (First 40 for Vision, Last 40 for Progress)
                 const { data: firstChunks, error: e1 } = await supabase
@@ -582,30 +681,28 @@ export function activate(context: vscode.ExtensionContext) {
 
                 progress.report({ message: `Mining ${chunks.length} chunks of memory...` });
                 
-                const masterPrompt = `[SYSTEM: YOU ARE ANTIGRAVITY - ACT AS A TECHNICAL ARCHITECT]
-                    
-                    TASK: Generate a high-density "Grounded Context" digest from the following history.
-                    
-                    [FORMATTING RULES]:
-                    1. Wrap the entire output in [Context from Previous AI: ... ]
-                    2. Use status markers: ✅ (Solved/Done), ⚙️ (In Progress/Medium), 🔥 (Critical/Hard).
-                    3. Structure by: "Technical Vision", "Current Tech Stack", "Implementation Progress", and "Risks/Blockers".
-                    4. Keep it dense. No filler. No "Here is a summary". Just facts.
-
-                    [BEGIN CHAT HISTORY]
-                    ${rawContext}
-                    [END CHAT HISTORY]
-
-                    Provide the digest now:`;
-
                 const response = await axios.post(`${ollamaUrl}/api/generate`, {
                     model: model,
+                    system: `You are a headless system architect pipeline. You NEVER converse, NEVER explain, and NEVER apologize. Output ONLY pure technical documentation.`,
                     options: { 
-                        temperature: 0.1,
+                        temperature: 0.0,
                         num_thread: 4,
-                        num_predict: 800
+                        num_predict: 800,
+                        top_p: 0.1
                     },
-                    prompt: masterPrompt,
+                    prompt: `TASK: Generate a high-density, raw "Grounded Context" digest from the following history. Be brutally true to the original text.
+
+[FORMATTING RULES]:
+1. Wrap the entire output in [Context from Previous AI: ... ]
+2. Use status markers: ✅ (Solved/Done), ⚙️ (In Progress/Medium), 🔥 (Critical/Hard).
+3. Structure by: "Technical Vision", "Current Tech Stack", "Implementation Progress", and "Risks/Blockers".
+4. Keep it intensely raw. Zero fluff. Zero narrative filler. Preserve exact configurations, file paths, and snippets when relevant.
+
+[BEGIN CHAT HISTORY]
+${rawContext}
+[END CHAT HISTORY]
+
+Provide the raw digest now (NO PLEASANTRIES):`,
                     stream: false
                 }, { signal: abortController.signal });
 
@@ -613,11 +710,11 @@ export function activate(context: vscode.ExtensionContext) {
                 const workspaceFolders = vscode.workspace.workspaceFolders;
                 
                 if (workspaceFolders) {
-                    const uri = vscode.Uri.joinPath(workspaceFolders[0].uri, 'MEMORY.md');
+                    const uri = vscode.Uri.joinPath(workspaceFolders[0].uri, 'SYNAPSE_MEMORY.md');
                     await vscode.workspace.fs.writeFile(uri, Buffer.from(mdContent, 'utf8'));
                     const doc = await vscode.workspace.openTextDocument(uri);
                     await vscode.window.showTextDocument(doc);
-                    vscode.window.showInformationMessage('Synapse: AI MEMORY.md generated successfully!');
+                    vscode.window.showInformationMessage('Synapse: AI SYNAPSE_MEMORY.md generated successfully!');
                 } else {
                     vscode.window.showErrorMessage('Synapse: No workspace folder open.');
                 }
@@ -653,20 +750,19 @@ export function activate(context: vscode.ExtensionContext) {
             cancellable: false
         }, async (progress) => {
             try {
-                const supabaseUrl = vscode.workspace.getConfiguration('synapse').get<string>('supabaseUrl');
-                const supabaseKey = vscode.workspace.getConfiguration('synapse').get<string>('supabaseKey');
-                const accessToken = await context.secrets.get('synapse_access_token');
+                const supabase = await (sessionProvider as any).getSupabase();
+                if (!supabase) throw new Error("Supabase not configured.");
                 
-                if (!supabaseUrl || !supabaseKey) throw new Error("Supabase not configured.");
-
-                const supabase = createClient(supabaseUrl, supabaseKey, { 
-                    global: { headers: { Authorization: `Bearer ${accessToken}` } } 
-                });
+                // 1. Get User ID
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) throw new Error("Please login to delete sessions.");
+                const userId = user.id;
 
                 const { error } = await supabase
                     .from('chunks')
                     .delete()
-                    .eq('session_id', sessionId);
+                    .eq('session_id', sessionId)
+                    .eq('user_id', userId);
 
                 if (error) throw error;
 
@@ -698,19 +794,12 @@ export function activate(context: vscode.ExtensionContext) {
         }, async (progress, token) => {
             try {
                 if (token.isCancellationRequested) throw new Error("Cancelled by user.");
-                const supabaseUrl = vscode.workspace.getConfiguration('synapse').get<string>('supabaseUrl');
-                const supabaseKey = vscode.workspace.getConfiguration('synapse').get<string>('supabaseKey');
                 const aesKey = await context.secrets.get('synapse_aes_key');
-                const accessToken = await context.secrets.get('synapse_access_token');
+                const supabase = await (sessionProvider as any).getSupabase();
                 
-                if (!supabaseUrl || !supabaseKey || !aesKey) {
+                if (!supabase || !aesKey) {
                     throw new Error("Synapse not configured. Please check your settings and AES key.");
                 }
-
-                // Initialize with token if available, otherwise use Anon Key
-                const supabase = accessToken 
-                    ? createClient(supabaseUrl, supabaseKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } } })
-                    : createClient(supabaseUrl, supabaseKey);
                 
                 // 1. Get the official User ID
                 const { data: { user } } = await supabase.auth.getUser();
@@ -733,7 +822,7 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!allChunks || allChunks.length === 0) throw new Error("No memory chunks found for this session under your account.");
 
                 // 3. Compute Centroid (Average Embedding)
-                const parsedEmbeddings = allChunks.map(c => typeof c.embedding === 'string' ? JSON.parse(c.embedding) : c.embedding);
+                const parsedEmbeddings = allChunks.map((c: any) => typeof c.embedding === 'string' ? JSON.parse(c.embedding) : c.embedding);
                 const dim = parsedEmbeddings[0].length;
                 const centroid = new Array(dim).fill(0);
                 for (const emb of parsedEmbeddings) {
@@ -763,17 +852,41 @@ export function activate(context: vscode.ExtensionContext) {
 
                 const decryptedChunks = await Promise.all(chunks.map((c: any) => SynapseCrypto.decrypt(c.content, aesKey)));
                 
-                // Porting the Chrome extension's "Token Budgeting" logic
+                // Sort by length descending: We want the "Big" summaries to be processed first
+                // so that smaller fragments can be identified as sub-strings and discarded.
+                const sortedChunks = decryptedChunks.sort((a, b) => b.length - a.length);
+
+                // Overlap Detection (Word-Set Deduplication)
                 let selectedTexts: string[] = [];
+                let seenWords = new Set<string>();
                 let totalChars = 0;
                 const BUDGET = 3000;
 
-                for (const text of decryptedChunks) {
-                    if (selectedTexts.length >= 1 && totalChars + text.length > BUDGET) {
-                        break;
+                for (const text of sortedChunks) {
+                    const cleanText = text.trim();
+                    if (!cleanText || cleanText.length < 10) continue;
+
+                    // 1. Sub-string check (Fast)
+                    const isSubString = selectedTexts.some(existing => existing.includes(cleanText));
+                    if (isSubString) continue;
+
+                    // 2. Word-Set Overlap Check (Fuzzy)
+                    const words = cleanText.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w: string) => w.length > 3);
+                    if (words.length > 0) {
+                        const overlapCount = words.filter((w: string) => seenWords.has(w)).length;
+                        const overlapRatio = overlapCount / words.length;
+                        
+                        // If 80% of the words already exist in our context, it's a repeat
+                        if (overlapRatio > 0.8) continue;
                     }
-                    selectedTexts.push(text);
-                    totalChars += text.length;
+
+                    if (selectedTexts.length >= 1 && totalChars + cleanText.length > BUDGET) {
+                        continue;
+                    }
+                    
+                    selectedTexts.push(cleanText);
+                    words.forEach((w: string) => seenWords.add(w));
+                    totalChars += cleanText.length;
                 }
 
                 const rawContext = selectedTexts.join('\n---\n');
@@ -791,11 +904,11 @@ export function activate(context: vscode.ExtensionContext) {
 
                 const workspaceFolders = vscode.workspace.workspaceFolders;
                 if (workspaceFolders) {
-                    const uri = vscode.Uri.joinPath(workspaceFolders[0].uri, 'RAW_MEMORY.md');
+                    const uri = vscode.Uri.joinPath(workspaceFolders[0].uri, 'SYNAPSE_RAW_MEMORY.md');
                     await vscode.workspace.fs.writeFile(uri, Buffer.from(groundedContext, 'utf8'));
                     const doc = await vscode.workspace.openTextDocument(uri);
                     await vscode.window.showTextDocument(doc);
-                    vscode.window.showInformationMessage('Synapse: RAW_MEMORY.md (Grounded Context) generated!');
+                    vscode.window.showInformationMessage('Synapse: SYNAPSE_RAW_MEMORY.md (Grounded Context) generated!');
                 }
             } catch (err: any) {
                 vscode.window.showErrorMessage(`Synapse Error: ${err.message}`);
@@ -832,14 +945,22 @@ class SynapseSessionProvider implements vscode.TreeDataProvider<SessionItem> {
         const supabaseUrl = vscode.workspace.getConfiguration('synapse').get<string>('supabaseUrl');
         const supabaseKey = vscode.workspace.getConfiguration('synapse').get<string>('supabaseKey');
         const aesKey = await this.context.secrets.get('synapse_aes_key');
-        const accessToken = await this.context.secrets.get('synapse_access_token');
+        
+        let hasSession = false;
+        if ((this as any).getSupabase) {
+            const supabase = await (this as any).getSupabase();
+            if (supabase) {
+                const { data } = await supabase.auth.getSession();
+                hasSession = !!data?.session;
+            }
+        }
 
         if (!supabaseUrl || !supabaseKey) {
             return [new SessionItem("Setup Supabase URL/Key in Settings", "", vscode.TreeItemCollapsibleState.None)];
         }
 
         // --- SECURITY GATE ---
-        if (!accessToken) {
+        if (!hasSession) {
             return [
                 new SessionItem("🔒 Cloud Memory Locked", "", vscode.TreeItemCollapsibleState.None),
                 new SessionItem("Please Login to secure your data", "login_prompt", vscode.TreeItemCollapsibleState.None)
@@ -851,17 +972,19 @@ class SynapseSessionProvider implements vscode.TreeDataProvider<SessionItem> {
         }
 
         try {
-            const supabase = createClient(supabaseUrl, supabaseKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } } });
+            const supabase = await (this as any).getSupabase();
+            if (!supabase) return [];
 
-            // 1. Get the current user ID to ensure isolation
+            // 1. Get User ID
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("User session expired. Please login again.");
+            if (!user) return [new SessionItem("Login to view sessions", "", vscode.TreeItemCollapsibleState.None)];
+            const userId = user.id;
 
-            // 2. Fetch sessions ONLY for this user
+            // 2. Fetch Sessions
             const { data, error } = await supabase
                 .from('chunks')
                 .select('session_id, session_title, created_at')
-                .eq('user_id', user.id)
+                .eq('user_id', userId)
                 .order('created_at', { ascending: false });
 
             if (error) {
@@ -925,7 +1048,7 @@ class SessionItem extends vscode.TreeItem {
     }
 }
 
-function getWebviewContent(initialText: string): string {
+function getWebviewContent(initialText: string, modelName: string): string {
     return `
         <!DOCTYPE html>
         <html>
@@ -940,12 +1063,13 @@ function getWebviewContent(initialText: string): string {
                 }
                 .copy-btn:hover { background: #4338ca; }
                 .status { font-size: 12px; color: #888; margin-bottom: 10px; }
+                .model-badge { background: rgba(79, 70, 229, 0.1); color: #4F46E5; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
             </style>
         </head>
         <body>
             <h1>Grounded Prompt Context</h1>
             <button class="copy-btn" onclick="copy()">Copy to Clipboard</button>
-            <div id="status" class="status">Streaming from Ollama...</div>
+            <div id="status" class="status">Streaming from Ollama <span class="model-badge">${modelName}</span></div>
             <pre id="content">${initialText}</pre>
             <script>
                 const vscode = acquireVsCodeApi();

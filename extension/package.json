@@ -4,7 +4,9 @@
   "description": "",
   "main": "background.js",
   "scripts": {
-    "build": "esbuild background.js --bundle --outfile=background.bundle.js --format=esm && esbuild offscreen.js --bundle --outfile=offscreen.bundle.js --format=iife",
+    "dev": "esbuild background.js --bundle --outfile=background.bundle.js --format=esm && esbuild offscreen.js --bundle --outfile=offscreen.bundle.js --format=iife",
+    "build": "npm run dev",
+    "release": "esbuild background.js --bundle --minify --drop:console --outfile=background.bundle.js --format=esm && esbuild offscreen.js --bundle --minify --drop:console --outfile=offscreen.bundle.js --format=iife && esbuild content.js --bundle --minify --drop:console --outfile=content.bundle.js && esbuild popup.js --bundle --minify --drop:console --outfile=popup.bundle.js && esbuild interceptor.js --bundle --minify --drop:console --outfile=interceptor.bundle.js",
     "watch": "esbuild background.js --bundle --outfile=background.bundle.js --format=esm --watch"
   },
   "keywords": [],

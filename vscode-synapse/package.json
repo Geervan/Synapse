@@ -2,13 +2,17 @@
   "name": "synapse-bridge",
   "displayName": "Synapse Memory Bridge",
   "description": "Cloud-synced AI memory for VS Code with local Ollama refinement.",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "publisher": "geervan",
   "icon": "media/marketplace_icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/geervan/synapse"
+    "url": "https://github.com/geervan/synapse.git"
+  },
+  "homepage": "https://github.com/geervan/synapse#readme",
+  "bugs": {
+    "url": "https://github.com/geervan/synapse/issues"
   },
   "engines": {
     "vscode": "^1.80.0"
@@ -45,12 +49,12 @@
       },
       {
         "command": "synapse.generateMemoryFile",
-        "title": "Synapse: Generate AI Memory File (.md)",
+        "title": "Synapse: Generate AI Memory File (SYNAPSE_MEMORY.md)",
         "icon": "$(sparkle)"
       },
       {
         "command": "synapse.generateRawMemoryFile",
-        "title": "Synapse: Generate Raw Memory File (.md)",
+        "title": "Synapse: Generate Raw Memory File (SYNAPSE_RAW_MEMORY.md)",
         "icon": "$(output)"
       },
       {
@@ -130,12 +134,12 @@
       "properties": {
         "synapse.supabaseUrl": {
           "type": "string",
-          "default": "YOUR_SUPABASE_URL",
+          "default": "https://qeowbrcttsfqjqovbmar.supabase.co",
           "description": "Your Supabase Project URL"
         },
         "synapse.supabaseKey": {
           "type": "string",
-          "default": "YOUR_SUPABASE_ANON_KEY",
+          "default": "sb_publishable_BtJptEP6_12BdGCz7cyAEw__-V1TWBR",
           "description": "Your Supabase Anon/Public Key"
         },
         "synapse.ollamaUrl": {
@@ -162,9 +166,10 @@
     "crypto-js": "^4.2.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
-    "@types/node": "18.x",
     "@types/crypto-js": "^4.2.1",
+    "@types/node": "18.x",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.9.1",
     "typescript": "^5.2.2"
   }
 }

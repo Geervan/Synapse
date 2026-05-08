@@ -25,7 +25,7 @@ function startLogin(provider) {
 
     chrome.runtime.sendMessage({ action: 'oauth_login', provider }, (response) => {
         if (response && response.success) {
-            if (badge) badge.innerText = 'Neural Link Active!';
+            if (badge) badge.innerText = 'Link Active!';
             setTimeout(() => window.close(), 1500);
         } else {
             if (badge) {

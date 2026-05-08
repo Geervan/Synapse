@@ -1,32 +1,30 @@
 # Dependencies
 node_modules/
-.npm/
-venv/
-.venv/
-__pycache__/
-*.pyc
+.DS_Store
 
 # Build artifacts
 *.bundle.js
-dist/
-build/
-
-# Local configuration
-.env
-.env.local
-secrets.json
-*.db
-memory.db
-
-# System files
-.DS_Store
-Thumbs.db
+*.vsix
 *.zip
-*.rar
-*.7z
+Synapse_Release/
+Synapse_Web_Extension_Release/
+Synapse_Extension_v1.2_Production/
+Synapse_Web_Extension_Release.zip
+extension/Synapse_Release/
+extension/Synapse_v1.2_Production.zip
+extension/Synapse_Chrome_v1.2_RELEASE.zip
+extension/*.bundle.js
+vscode-synapse/out/
+vscode-synapse/*.vsix
 
 # VS Code specific
 .vscode/
-*.vsix
-out/
-node_modules/
+.history/
+
+# Backend/DB
+backend/memory.db
+backend/__pycache__/
+*.pyc
+
+# Local env
+.env

@@ -1,4 +1,4 @@
-# Synapse: The Neural Link for AI Developers
+# Synapse: The Context Link for AI Developers
 
 **Synapse** is a high-performance memory layer that bridges the gap between your browser-based AI chats and your VS Code IDE. It captures technical details from your conversations and makes them instantly available as grounded context for your local development workflow.
 
@@ -8,7 +8,7 @@
 
 Modern development involves jumping between Claude, ChatGPT, and your IDE. Important technical decisions, architecture plans, and bug fixes often get trapped in your browser history. **Synapse frees that memory.**
 
-- **Seamless Sync**: Automatically captures context from ChatGPT, Claude, Gemini, and DeepSeek.
+- **Seamless Sync**:  captures context from ChatGPT, Claude, Gemini, and DeepSeek.
 - **Zero-Noise Privacy**: End-to-end AES-256 encryption. Your memories are encrypted locally before they ever touch the cloud.
 - **Local AI Refinement**: Use local Ollama models (like Llama3 or Qwen2) to refine raw chat history into dense, actionable technical digests.
 - **Instant Context**: Generate .md memory files or raw context prompts for your LLMs with a single click.

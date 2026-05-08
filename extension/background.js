@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 // ==========================================
 // 1. SUPABASE CONFIG (User MUST fill these in)
 // ==========================================
-const SUPABASE_URL = 'YOUR_SUPABASE_URL_HERE';
-const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY_HERE';
+const SUPABASE_URL = 'https://qeowbrcttsfqjqovbmar.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_BtJptEP6_12BdGCz7cyAEw__-V1TWBR';
 
 // Only init if keys are provided
 let supabase = null;
@@ -28,6 +28,22 @@ if (SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE') {
 }
 
 let realtimeChannel = null;
+
+// Start the Sync Pulse (Realtime Sync)
+if (supabase) {
+    realtimeChannel = supabase
+        .channel('sync-pulse')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'chunks' }, (payload) => {
+            console.log('SYNAPSE: Sync Pulse detected change:', payload.eventType);
+            // Broadcast to all active tabs
+            chrome.tabs.query({}, (tabs) => {
+                tabs.forEach(tab => {
+                    chrome.tabs.sendMessage(tab.id, { action: 'refresh_sessions' }).catch(() => {});
+                });
+            });
+        })
+        .subscribe();
+}
 
 // Sync progress tracking (for polling from content script)
 let syncStatus = { done: true, count: 0, progress: null };
@@ -100,6 +116,15 @@ async function getEmbeddingWithTimeout(text, timeoutMs = 60000) {
 // RAM Cache for high-speed operations
 let cachedEncryptionKey = null;
 let cachedUser = null;
+
+// Listen for storage changes to hot-reload encryption keys (Fixed: No reload needed!)
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local' && (changes.synapse_encryption_key || changes.synapse_user_id)) {
+        console.log("SYNAPSE: Encryption cache cleared (Hot-Reload).");
+        cachedEncryptionKey = null;
+        cachedUser = null;
+    }
+});
 
 async function getEncryptionKey() {
     if (cachedEncryptionKey) return cachedEncryptionKey;
@@ -182,6 +207,17 @@ function compressContext(text) {
     text = text.replace(/ {2,}/g, ' ').replace(/\n{3,}/g, '\n\n');
     
     let result = text.trim();
+    
+    // Clean up dangling punctuation (e.g. ", I can explain" after "Actually" is stripped)
+    result = result.replace(/^[\s,.;:!?-]+/gm, '').trim();
+
+    // Strip Emojis and special AI symbols for a cleaner technical look
+    result = result.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F191}-\u{1F251}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F004}\u{1F0CF}\u{1F170}-\u{1F171}\u{1F17E}-\u{1F17F}\u{1F18E}\u{3030}\u{2B50}\u{2B55}\u{2934}-\u{2935}\u{2B05}-\u{2B07}\u{2194}-\u{2199}\u{21A9}-\u{21AA}\u{3297}\u{3299}\u{303D}\u{231A}\u{231B}\u{23E9}-\u{23EC}\u{23F0}\u{23F3}]/gu, '');
+    result = result.replace(/[🔹👉🔁🧠🔥✅🎯⚡🧵]/g, ''); // Explicitly catch common ones
+    
+    // Final cleanup of redundant spaces left by emoji stripping
+    result = result.replace(/ +/g, ' ').trim();
+
     // Restore code blocks
     for (let i = 0; i < codeBlocks.length; i++) {
         result = result.replace(`__CODE_BLOCK_${i}__`, codeBlocks[i]);
@@ -482,18 +518,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         chunksToUse = sessionSpecific.length > 0 ? sessionSpecific : matchedChunks.slice(0, 10);
                     }
 
-                    // 3. Apply 3000 character hard cap budget
+                    // Overlap Detection (Word-Set Deduplication)
                     let selectedTexts = [];
+                    let seenWords = new Set();
                     let totalChars = 0;
                     const BUDGET = 3000;
 
+                    // Decrypt and sort by length descending
+                    let decryptedChunks = [];
                     for (const row of chunksToUse) {
-                        const decryptedContent = await decryptText(row.content);
-                        if (selectedTexts.length >= 1 && totalChars + decryptedContent.length > BUDGET) {
-                            break;
+                        const content = await decryptText(row.content);
+                        if (content) decryptedChunks.push(content.trim());
+                    }
+                    decryptedChunks.sort((a, b) => b.length - a.length);
+
+                    for (const text of decryptedChunks) {
+                        if (!text || text.length < 10) continue;
+
+                        // 1. Sub-string check (Fast)
+                        const isSubString = selectedTexts.some(existing => existing.includes(text));
+                        if (isSubString) continue;
+
+                        // 2. Word-Set Overlap Check (Fuzzy)
+                        const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3);
+                        if (words.length > 0) {
+                            const overlapCount = words.filter(w => seenWords.has(w)).length;
+                            const overlapRatio = overlapCount / words.length;
+                            if (overlapRatio > 0.8) continue;
                         }
-                        selectedTexts.push(decryptedContent);
-                        totalChars += decryptedContent.length;
+
+                        if (selectedTexts.length >= 1 && totalChars + text.length > BUDGET) {
+                            continue; 
+                        }
+                        
+                        selectedTexts.push(text);
+                        words.forEach(w => seenWords.add(w));
+                        totalChars += text.length;
                     }
 
                     const rawContext = selectedTexts.join('\n---\n');

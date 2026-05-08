@@ -7,7 +7,7 @@
     "48": "icon48.png",
     "128": "icon128.png"
   },
-  "description": "The neural link between your IDE and Browser. Seamless, secure, and instant context for every LLM.",
+  "description": "The seamless, secure, and instant context link between your IDE and Browser for every LLM.",
   "permissions": [
     "storage",
     "activeTab",
@@ -43,14 +43,14 @@
         "https://gemini.google.com/*",
         "https://chat.deepseek.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["content.bundle.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["interceptor.js"],
+      "resources": ["interceptor.bundle.js"],
       "matches": [
         "https://chatgpt.com/*", 
         "https://chat.openai.com/*", 
