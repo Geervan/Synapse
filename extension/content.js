@@ -248,6 +248,7 @@ function injectUI() {
     const selectEl = document.getElementById('synapse-session-select');
     const deleteBtn = document.getElementById('synapse-delete-btn');
     let uploadInProgress = false;
+    let hasKey = false;
     
     // Auth UI elements
     const authStatus = document.getElementById('synapse-auth-status');
@@ -255,20 +256,30 @@ function injectUI() {
     const mainUI = document.getElementById('synapse-main-ui');
     const btnLoginGoogle = document.getElementById('synapse-login-google');
     const btnLoginGithub = document.getElementById('synapse-login-github');
+    let setupUI = document.getElementById('synapse-setup-ui');
+    if (!setupUI) {
+        setupUI = document.createElement('div');
+        setupUI.id = 'synapse-setup-ui';
+        setupUI.style.display = 'none';
+        mainUI.parentElement.insertBefore(setupUI, mainUI);
+    }
 
     async function checkAuth() {
         authStatus.innerHTML = '<span class="synapse-spinner" style="width: 10px; height: 10px;"></span>';
         try {
             const data = await new Promise((resolve) => chrome.runtime.sendMessage({ action: 'get_auth' }, resolve));
             if (data && data.user) {
+                const storage = await new Promise(r => chrome.storage.local.get(['synapse_encryption_key'], r));
+                hasKey = !!storage.synapse_encryption_key;
+
                 const userEmail = data.user.email || "Logged in";
                 authStatus.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 4px;">
-                        <button id="synapse-key-mgmt-btn" title="Manage Encryption & Sync" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: #a1a1aa; display: flex; align-items: center; transition: color 0.2s;" onmouseover="this.style.color='#10b981'" onmouseout="this.style.color='#a1a1aa'">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3y"></path></svg>
+                        <button id="synapse-key-mgmt-btn" title="Manage Encryption & Sync" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: ${hasKey ? '#a1a1aa' : '#fbbf24'}; display: flex; align-items: center; transition: color 0.2s;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3"></path></svg>
                         </button>
                         <span style="color: #10b981; font-size: 10px; display: inline-flex; align-items: center; margin-right: 4px;" title="${userEmail}">●</span>
-                        <button id="synapse-logout-btn" title="Logout (${userEmail})" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: #a1a1aa; display: flex; align-items: center; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#a1a1aa'">
+                        <button id="synapse-logout-btn" title="Logout (${userEmail})" style="background: transparent; border: none; padding: 4px; cursor: pointer; color: #a1a1aa; display: flex; align-items: center; transition: color 0.2s;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                         </button>
                     </div>
@@ -321,6 +332,14 @@ function injectUI() {
                 mgmtBtn.addEventListener('click', () => {
                     setKeyPortalOpen(!keyPortalOpen);
                 });
+                
+                const keyColor = hasKey ? '#a1a1aa' : '#fbbf24';
+                mgmtBtn.addEventListener('mouseenter', () => mgmtBtn.style.color = '#10b981');
+                mgmtBtn.addEventListener('mouseleave', () => mgmtBtn.style.color = keyColor);
+
+                const logoutBtn = document.getElementById('synapse-logout-btn');
+                logoutBtn.addEventListener('mouseenter', () => logoutBtn.style.color = '#ef4444');
+                logoutBtn.addEventListener('mouseleave', () => logoutBtn.style.color = '#a1a1aa');
 
                 document.getElementById('synapse-copy-key-btn').addEventListener('click', () => {
                     chrome.storage.local.get(['synapse_encryption_key'], (result) => {
@@ -344,22 +363,59 @@ function injectUI() {
                     showSynapseToast("link updated!", "success");
                     setKeyPortalOpen(false);
                     importInput.value = '';
-                    fetchSessions(); 
+                    checkAuth(); 
                 });
                 document.getElementById('synapse-logout-btn').addEventListener('click', async () => {
                     authStatus.innerHTML = '<span class="synapse-spinner" style="width: 10px; height: 10px;"></span>';
                     await new Promise((resolve) => chrome.runtime.sendMessage({ action: 'oauth_logout' }, resolve));
                     checkAuth();
                 });
+                if (!hasKey) {
+                    setupUI.innerHTML = `
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30px 20px; min-height: 200px;">
+                            <div style="font-size: 32px; margin-bottom: 16px; filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.3));">🔑</div>
+                            <div style="font-weight: 600; font-size: 16px; margin-bottom: 8px; color: #fff; letter-spacing: -0.01em;">Setup Encryption</div>
+                            <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 24px; line-height: 1.6; max-width: 220px;">
+                                You're on a new browser. To access your memories, you need your encryption key.
+                            </div>
+                            
+                            <button id="synapse-setup-import-btn" class="synapse-btn" style="width: 100%; max-width: 220px; background: #ffffff; color: #000; font-weight: 500; border-radius: 8px; padding: 12px; margin-bottom: 12px; transition: transform 0.2s;">
+                                I have a key (Import)
+                            </button>
+                            
+                            <div style="font-size: 10px; color: rgba(255,255,255,0.2); margin: 8px 0; text-transform: uppercase; letter-spacing: 1px;">or</div>
+                            
+                            <button id="synapse-setup-generate-btn" class="synapse-btn" style="width: 100%; max-width: 220px; background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; font-size: 11px; transition: all 0.2s;">
+                                I'm new (Generate Fresh)
+                            </button>
+                        </div>
+                    `;
+                    document.getElementById('synapse-setup-import-btn').addEventListener('click', () => setKeyPortalOpen(true));
+                    document.getElementById('synapse-setup-generate-btn').addEventListener('click', async () => {
+                        const confirm = await showSynapseConfirm("Generate a fresh key? Old memories won't be readable.");
+                        if (confirm) {
+                            chrome.runtime.sendMessage({ action: 'generate_new_key' }, () => {
+                                showSynapseToast("Fresh key generated!", "success");
+                                checkAuth();
+                            });
+                        }
+                    });
+                    setupUI.style.display = 'block';
+                    mainUI.style.display = 'none';
+                } else {
+                    setupUI.style.display = 'none';
+                    mainUI.style.display = 'block';
+                    fetchSessions();
+                }
                 authOverlay.style.display = 'none';
-                mainUI.style.display = 'block';
-                fetchSessions();
             } else {
+                hasKey = false;
                 authStatus.innerHTML = `<span style="color: #ef4444; font-size: 10px; display: inline-flex; align-items: center;">●</span>`;
                 authOverlay.style.display = 'flex';
                 mainUI.style.display = 'none';
             }
         } catch (e) {
+            hasKey = false;
             authStatus.innerHTML = `<span style="color: #ef4444; font-size: 10px; display: inline-flex; align-items: center;">●</span>`;
             authOverlay.style.display = 'flex';
             mainUI.style.display = 'none';
@@ -424,7 +480,7 @@ function injectUI() {
             deleteBtn.innerHTML = `<span class="synapse-spinner" style="margin-right: 0;"></span>`;
             await apiCall('/sessions', 'DELETE', { session_id: sid });
             localStorage.removeItem('synapse_last_session');
-            await fetchSessions();
+            if (hasKey) await fetchSessions();
             deleteBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
             deleteBtn.disabled = false;
             showSynapseToast("Memory deleted.", "success");
@@ -585,7 +641,7 @@ function injectUI() {
                     uploadInProgress = false;
                     forceBtn.disabled = false;
                     forceBtn.innerText = "Upload to Memory";
-                    fetchSessions();
+                    if (hasKey) fetchSessions();
                     showSynapseToast("Sync finished in background (fallback).", "info");
                 }
             }, 90000);
@@ -607,7 +663,7 @@ function injectUI() {
                             uploadInProgress = false;
                             forceBtn.disabled = false;
                             forceBtn.innerText = "Upload to Memory";
-                            fetchSessions();
+                            if (hasKey) fetchSessions();
                             showSynapseToast(`Successfully saved ${response.count} chunks!`, "success");
                         } else if (response && response.progress) {
                             forceBtn.innerHTML = `<span class="synapse-spinner" style="margin-right: 6px;"></span> Syncing ${response.progress.current}/${response.progress.total}`;
@@ -737,7 +793,7 @@ function injectUI() {
                     if (localStorage.getItem('synapse_last_session') === session.id) {
                         localStorage.removeItem('synapse_last_session');
                     }
-                    await fetchSessions();
+                    if (hasKey) await fetchSessions();
                     document.getElementById('synapse-search').dispatchEvent(new Event('input'));
                     showSynapseToast("Memory deleted.", "success");
                 }
@@ -795,7 +851,7 @@ chrome.runtime.onMessage.addListener((request) => {
             forceBtn.disabled = false;
             forceBtn.innerText = "Upload to Memory";
         }
-        fetchSessions();
+        if (hasKey) fetchSessions();
         showSynapseToast(`Successfully finished saving ${request.count} chunks!`, "success");
     } else if (request.action === 'upload_error' || request.action === 'sync_error') {
         uploadInProgress = false;

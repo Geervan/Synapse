@@ -168,18 +168,14 @@ async function getEncryptionKey() {
     if (cachedEncryptionKey) return cachedEncryptionKey;
     return new Promise((resolve) => {
         chrome.storage.local.get(['synapse_encryption_key'], async (result) => {
-            let key;
             if (result.synapse_encryption_key) {
                 const keyBuffer = Uint8Array.from(atob(result.synapse_encryption_key), c => c.charCodeAt(0));
-                key = await crypto.subtle.importKey('raw', keyBuffer, 'AES-GCM', true, ['encrypt', 'decrypt']);
+                const key = await crypto.subtle.importKey('raw', keyBuffer, 'AES-GCM', true, ['encrypt', 'decrypt']);
+                cachedEncryptionKey = key;
+                resolve(key);
             } else {
-                key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
-                const exported = await crypto.subtle.exportKey('raw', key);
-                const exportedBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
-                chrome.storage.local.set({ synapse_encryption_key: exportedBase64 });
+                resolve(null);
             }
-            cachedEncryptionKey = key;
-            resolve(key);
         });
     });
 }
@@ -187,6 +183,7 @@ async function getEncryptionKey() {
 async function encryptText(text) {
     if (!text) return text;
     const key = await getEncryptionKey();
+    if (!key) return text; // Fallback to plaintext or handle via UI
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encoded = new TextEncoder().encode(text);
     const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, encoded);
@@ -201,6 +198,7 @@ async function decryptText(encryptedStr) {
     if (!encryptedStr || !encryptedStr.startsWith('E2EE:')) return encryptedStr;
     try {
         const key = await getEncryptionKey();
+        if (!key) return "[Key Missing]";
         const combined = Uint8Array.from(atob(encryptedStr.substring(5)), c => c.charCodeAt(0));
         const iv = combined.slice(0, 12);
         const ciphertext = combined.slice(12);
@@ -408,6 +406,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error("SYNAPSE: Signout error", err);
             sendResponse({ success: false, error: err.toString() });
         });
+        return true;
+    }
+
+    if (request.action === 'generate_new_key') {
+        (async () => {
+            const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+            const exported = await crypto.subtle.exportKey('raw', key);
+            const exportedBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+            await chrome.storage.local.set({ synapse_encryption_key: exportedBase64 });
+            cachedEncryptionKey = key;
+            sendResponse({ success: true });
+        })();
         return true;
     }
     
